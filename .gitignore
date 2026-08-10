@@ -1,0 +1,3 @@
+# secrets stay local to this machine
+.env
+accounts.env

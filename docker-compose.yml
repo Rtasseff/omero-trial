@@ -1,0 +1,58 @@
+# OMERO trial stack — gjesus3 Arm-A spike (gjesus3-tools 04/06)
+# Runs under docker-compose inside WSL Ubuntu.
+# COMPOSE_PROJECT_NAME=omero-trial is pinned in .env so container/volume names
+# stay stable regardless of this directory's name (the volumes were created
+# when the compose project lived elsewhere).
+version: "3"
+
+services:
+  database:
+    image: "postgres:16"
+    environment:
+      POSTGRES_USER: omero
+      POSTGRES_DB: omero
+      POSTGRES_PASSWORD: ${OMERO_DB_PASS}
+    networks:
+      - omero
+    volumes:
+      - "database:/var/lib/postgresql/data"
+    restart: unless-stopped
+
+  omeroserver:
+    image: "openmicroscopy/omero-server:5"
+    environment:
+      CONFIG_omero_db_host: database
+      CONFIG_omero_db_user: omero
+      CONFIG_omero_db_pass: ${OMERO_DB_PASS}
+      CONFIG_omero_db_name: omero
+      ROOTPASS: ${OMERO_ROOT_PASS}
+    networks:
+      - omero
+    ports:
+      - "4064:4064"
+    volumes:
+      - "omero:/OMERO"
+      # read-only mirror of J:\gjesus3-data\raw\MICROSCOPY (robocopy-maintained);
+      # in-place imports symlink into this path, so it must not move while
+      # imported images exist
+      - "/mnt/d/projects/gjesus3-tools/omero-trial/data:/gjesus3-data:ro"
+    restart: unless-stopped
+
+  omeroweb:
+    image: "openmicroscopy/omero-web-standalone:5"
+    environment:
+      OMEROHOST: omeroserver
+      # Django CSRF: must list every origin researchers will use in the browser
+      CONFIG_omero_web_csrf__trusted__origins: '["http://10.10.2.195:4080", "http://localhost:4080"]'
+    networks:
+      - omero
+    ports:
+      - "4080:4080"
+    restart: unless-stopped
+
+networks:
+  omero:
+
+volumes:
+  database:
+  omero:
