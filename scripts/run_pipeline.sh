@@ -3,7 +3,12 @@
 # that OMERO doesn't have yet, then annotate the new images.
 # Run inside WSL:  bash run_pipeline.sh
 # (Stage 1 is sync_gjesus3.ps1 on the Windows side.)
-set -eu
+set -u
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-python3 "$REPO/scripts/import_all.py"
-bash "$REPO/scripts/run_annotation.sh"
+# import_all exits 1 when any acquisition failed (e.g. the known Bio-Formats
+# CZI bug, see manifest/import_failures.csv) -- that must not block annotating
+# the acquisitions that DID import. Run both, report the worst exit.
+python3 "$REPO/scripts/import_all.py"; imp=$?
+bash "$REPO/scripts/run_annotation.sh"; ann=$?
+if [ "$ann" -ne 0 ]; then exit "$ann"; fi
+exit "$imp"
