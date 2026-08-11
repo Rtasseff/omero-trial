@@ -4,10 +4,11 @@
 # to (a) that user's own data and (b) All Members (experimenter_id=-1).
 # If (a)=0 and (b)>0, permissions are fine - the user just needs to switch the
 # owner dropdown above the data tree (or use the ?experimenter=-1 link).
-# Run inside WSL:  bash check_visibility.sh <username> <password> [base-url]
+# Run inside WSL:  bash check_visibility.sh <username> <password> [base-url] [own-id]
 set -u
 USER_=${1:?username}; PASS_=${2:?password}
 BASE_URL=${3:-http://localhost:4080}
+OWN_ID=${4:-}
 J=$(mktemp); trap 'rm -f "$J"' EXIT
 
 page=$(curl -s -c "$J" "$BASE_URL/webclient/login/")
@@ -20,20 +21,14 @@ curl -s -b "$J" -c "$J" -o /dev/null \
   --data-urlencode "password=$PASS_" \
   "$BASE_URL/webclient/login/"
 
-uid=$(curl -s -b "$J" "$BASE_URL/webapi/whoami/" 2>/dev/null | python3 -c 'import json,sys
-try: print(json.load(sys.stdin)["id"])
-except Exception: print("")')
-if [ -z "$uid" ]; then
-  # fallback: webclient active user endpoint
-  uid=$(curl -s -b "$J" "$BASE_URL/api/v0/m/experimenters/?limit=500" | python3 -c 'import json,sys
-d=json.load(sys.stdin); print("")' 2>/dev/null)
-fi
-
 count() {
   curl -s -b "$J" "$BASE_URL/webclient/api/containers/?experimenter_id=$1" \
-    | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["projects"]))'
+    | python3 -c 'import json,sys
+d = json.load(sys.stdin)
+print("projects=%d orphaned_images=%d" % (len(d.get("projects", [])),
+      (d.get("orphaned") or {}).get("childCount", 0)))'
 }
-if [ -n "$uid" ]; then
-  echo "projects owned by $USER_ (id $uid): $(count "$uid")"
+if [ -n "$OWN_ID" ]; then
+  echo "own-filter view (id $OWN_ID):  $(count "$OWN_ID")"
 fi
-echo "projects visible as All Members:   $(count -1)"
+echo "All Members view:          $(count -1)"

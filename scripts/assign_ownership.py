@@ -142,3 +142,18 @@ if unresolved:
     top = sorted(unresolved.items(), key=lambda kv: -kv[1])[:12]
     print("unmapped names (add OMERO users or ALIASES to claim):",
           ", ".join(f"{n} x{c}" for n, c in top), flush=True)
+
+# chown removed the giver's dataset links from every transferred image (that is
+# how Chown2 works) - restore the tree with root-owned links (see repair_links.py)
+def dcp(src, dst):
+    subprocess.run(["docker", "cp", str(src), f"omero-trial_omeroserver_1:{dst}"], check=True)
+
+dcp(REPO / "scripts" / "repair_links.py", "/tmp/")
+dcp(REGISTRY, "/tmp/")
+dcp(IMPORT_MAP, "/tmp/")
+r = subprocess.run(C[:-2] + ["/opt/omero/server/venv3/bin/python", "/tmp/repair_links.py",
+                             creds["OMERO_ROOT_PASS"]],
+                   capture_output=True, text=True)
+print(r.stdout.strip() or r.stderr[-500:], flush=True)
+if r.returncode != 0:
+    raise SystemExit("repair_links failed")
