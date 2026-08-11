@@ -108,6 +108,45 @@ for row in imported:
     if stale:
         to_move[target].append(ids)   # whole acq together: never split a fileset
 
+# --- project shells ----------------------------------------------------------
+# Verified on this deployment (2026-08-12, Ryan's UI + queries): the webclient
+# owner filter selects TOP-LEVEL containers only; an owned project displays its
+# full contents regardless of image owners. So giving a researcher their
+# project shells makes their default login view land on their projects, whole.
+# Rule: shell owner = the researcher with the most resolvable acquisitions in
+# the project; none resolvable -> importer. chown --exclude Image moves the
+# project + its datasets; the boundary dataset-image links get deleted by
+# Chown2 (regardless of who owns the links) and are restored by the repair
+# pass below, which is why repair MUST run after this.
+proj_votes = defaultdict(lambda: defaultdict(int))
+for row in imported:
+    r = reg.get(row["acq_id"])
+    if r is not None:
+        proj_votes[r["project_id"] or "PROJ-none"][resolve(r)] += 1
+proj_target = {}
+for pid, votes in proj_votes.items():
+    named = sorted(((n, u) for u, n in votes.items() if u != IMPORTER), reverse=True)
+    proj_target[pid] = named[0][1] if named else IMPORTER
+
+proj_moves = 0
+for line in omero_sh(
+        'hql -q --style plain --limit 1000 '
+        '"select p.id, p.details.owner.omeName, p.name from Project p"').splitlines():
+    parts = line.split(",", 3)
+    if len(parts) < 4 or not parts[0].strip().isdigit():
+        continue
+    oid, owner, name = parts[1].strip(), parts[2].strip(), parts[3].strip()
+    target = proj_target.get(name.split(" · ")[0], IMPORTER)
+    if owner != target:
+        out = omero_sh(f"chown {target} Project:{oid} --exclude Image 2>&1", check=False)
+        if "ok" not in out:
+            print(f"WARN project chown {name} -> {target}: {out.strip()[-300:]}", flush=True)
+        else:
+            print(f"project {name} -> {target}", flush=True)
+            proj_moves += 1
+if proj_moves == 0:
+    print("project shells already current", flush=True)
+
 moved = 0
 for login, groups in sorted(to_move.items()):
     batch = []
