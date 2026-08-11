@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # Diagnose the "I log in and see nothing" report: logs into OMERO.web as the
-# given user and prints how many projects the data tree returns when filtered
-# to (a) that user's own data and (b) All Members (experimenter_id=-1).
-# If (a)=0 and (b)>0, permissions are fine - the user just needs to switch the
-# owner dropdown above the data tree (or use the ?experimenter=-1 link).
-# Run inside WSL:  bash check_visibility.sh <username> <password> [base-url] [own-id]
+# given user and prints how many projects the whole-group view returns. If
+# this is >0 while the user's tree looks empty in the browser, permissions are
+# fine - they just need to switch the owner dropdown above the data tree to
+# All Members.
+# CAUTION (learned 2026-08-11): this containers endpoint IGNORES an
+# experimenter_id query parameter - do not use it to test the own-data filter;
+# that once produced a false "own view shows everything" conclusion. The
+# browser UI is the only honest test of the owner filter.
+# Run inside WSL:  bash check_visibility.sh <username> <password> [base-url]
 set -u
 USER_=${1:?username}; PASS_=${2:?password}
 BASE_URL=${3:-http://localhost:4080}
-OWN_ID=${4:-}
+OWN_ID=""
 J=$(mktemp); trap 'rm -f "$J"' EXIT
 
 page=$(curl -s -c "$J" "$BASE_URL/webclient/login/")
