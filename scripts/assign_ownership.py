@@ -136,6 +136,8 @@ for line in omero_sh(
     if len(parts) < 4 or not parts[0].strip().isdigit():
         continue
     oid, owner, name = parts[1].strip(), parts[2].strip(), parts[3].strip()
+    if not name.startswith("PROJ-"):
+        continue          # personal 'All <user> data' projects are not vote-managed
     target = proj_target.get(name.split(" · ")[0], IMPORTER)
     if owner != target:
         out = omero_sh(f"chown {target} Project:{oid} --exclude Image 2>&1", check=False)
@@ -196,3 +198,12 @@ r = subprocess.run(C[:-2] + ["/opt/omero/server/venv3/bin/python", "/tmp/repair_
 print(r.stdout.strip() or r.stderr[-500:], flush=True)
 if r.returncode != 0:
     raise SystemExit("repair_links failed")
+
+# personal 'All <user> data' projects: created as the user, delta-maintained
+dcp(REPO / "scripts" / "personal_projects.py", "/tmp/")
+r = subprocess.run(C[:-2] + ["/opt/omero/server/venv3/bin/python", "/tmp/personal_projects.py",
+                             creds["OMERO_ROOT_PASS"]],
+                   capture_output=True, text=True)
+print(r.stdout.strip() or r.stderr[-500:], flush=True)
+if r.returncode != 0:
+    raise SystemExit("personal_projects failed")
